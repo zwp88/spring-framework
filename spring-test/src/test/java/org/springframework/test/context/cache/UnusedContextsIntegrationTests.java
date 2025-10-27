@@ -16,8 +16,6 @@
 
 package org.springframework.test.context.cache;
 
-import java.util.Arrays;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.ClassOrderer;
@@ -25,8 +23,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestClassOrder;
-import org.junit.platform.engine.discovery.ClassSelector;
-import org.junit.platform.engine.discovery.DiscoverySelectors;
 import org.junit.platform.testkit.engine.EngineTestKit;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +34,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClasses;
 import static org.springframework.test.context.NestedTestConfiguration.EnclosingConfiguration.INHERIT;
 import static org.springframework.test.context.NestedTestConfiguration.EnclosingConfiguration.OVERRIDE;
 
@@ -69,13 +66,13 @@ class UnusedContextsIntegrationTests {
 			// No BeforeTestClass, since EventPublishingTestExecutionListener
 			// only publishes events for a context that has already been loaded.
 			"AfterTestClass:TestCase1",
-			"ContextStopped:TestCase1",
+			"ContextPaused:TestCase1",
 
 			// --- TestCase2 -----------------------------------------------
 			"ContextRestarted:TestCase1",
 			"BeforeTestClass:TestCase2",
 			"AfterTestClass:TestCase2",
-			"ContextStopped:TestCase1",
+			"ContextPaused:TestCase1",
 
 			// --- TestCase3 -----------------------------------------------
 			"ContextRestarted:TestCase1",
@@ -90,13 +87,13 @@ class UnusedContextsIntegrationTests {
 			// No BeforeTestClass, since EventPublishingTestExecutionListener
 			// only publishes events for a context that has already been loaded.
 			"AfterTestClass:TestCase4",
-			"ContextStopped:TestCase4",
+			"ContextPaused:TestCase4",
 
 			// --- TestCase5 -----------------------------------------------
 			"ContextRestarted:TestCase4",
 			"BeforeTestClass:TestCase5",
 			"AfterTestClass:TestCase5",
-			"ContextStopped:TestCase4"
+			"ContextPaused:TestCase4"
 		);
 	}
 
@@ -130,19 +127,19 @@ class UnusedContextsIntegrationTests {
 						// using the context
 
 					"AfterTestClass:OverridingNestedTestCase1",
-					"ContextStopped:OverridingNestedTestCase1",
+					"ContextPaused:OverridingNestedTestCase1",
 
 					// --- OverridingNestedTestCase2 ---------------------------
 					"ContextRestarted:OverridingNestedTestCase1",
 					"BeforeTestClass:OverridingNestedTestCase2",
 					"AfterTestClass:OverridingNestedTestCase2",
-					"ContextStopped:OverridingNestedTestCase1",
+					"ContextPaused:OverridingNestedTestCase1",
 
 				"AfterTestClass:NestedTestCase",
 				// No Stopped event, since EnclosingTestCase is still using the context
 
 			"AfterTestClass:EnclosingTestCase",
-			"ContextStopped:EnclosingTestCase"
+			"ContextPaused:EnclosingTestCase"
 		);
 	}
 
@@ -161,23 +158,23 @@ class UnusedContextsIntegrationTests {
 			// --- ContextHierarchyLevel1TestCase ------------------------------
 			"ContextRefreshed:ContextHierarchyLevel1TestCase",
 			"AfterTestClass:ContextHierarchyLevel1TestCase",
-			"ContextStopped:ContextHierarchyLevel1TestCase",
+			"ContextPaused:ContextHierarchyLevel1TestCase",
 
 			// --- ContextHierarchyLevel2TestCase ------------------------------
 			"ContextRestarted:ContextHierarchyLevel1TestCase",
 			"ContextRefreshed:ContextHierarchyLevel2TestCase",
 			"AfterTestClass:ContextHierarchyLevel2TestCase",
-			"ContextStopped:ContextHierarchyLevel2TestCase",
-			"ContextStopped:ContextHierarchyLevel1TestCase",
+			"ContextPaused:ContextHierarchyLevel2TestCase",
+			"ContextPaused:ContextHierarchyLevel1TestCase",
 
 			// --- ContextHierarchyLevel3a1TestCase -----------------------------
 			"ContextRestarted:ContextHierarchyLevel1TestCase",
 			"ContextRestarted:ContextHierarchyLevel2TestCase",
 			"ContextRefreshed:ContextHierarchyLevel3a1TestCase",
 			"AfterTestClass:ContextHierarchyLevel3a1TestCase",
-			"ContextStopped:ContextHierarchyLevel3a1TestCase",
-			"ContextStopped:ContextHierarchyLevel2TestCase",
-			"ContextStopped:ContextHierarchyLevel1TestCase",
+			"ContextPaused:ContextHierarchyLevel3a1TestCase",
+			"ContextPaused:ContextHierarchyLevel2TestCase",
+			"ContextPaused:ContextHierarchyLevel1TestCase",
 
 			// --- ContextHierarchyLevel3a2TestCase -----------------------------
 			"ContextRestarted:ContextHierarchyLevel1TestCase",
@@ -185,18 +182,18 @@ class UnusedContextsIntegrationTests {
 			"ContextRestarted:ContextHierarchyLevel3a1TestCase",
 			"BeforeTestClass:ContextHierarchyLevel3a2TestCase",
 			"AfterTestClass:ContextHierarchyLevel3a2TestCase",
-			"ContextStopped:ContextHierarchyLevel3a1TestCase",
-			"ContextStopped:ContextHierarchyLevel2TestCase",
-			"ContextStopped:ContextHierarchyLevel1TestCase",
+			"ContextPaused:ContextHierarchyLevel3a1TestCase",
+			"ContextPaused:ContextHierarchyLevel2TestCase",
+			"ContextPaused:ContextHierarchyLevel1TestCase",
 
 			// --- ContextHierarchyLevel3bTestCase -----------------------------
 			"ContextRestarted:ContextHierarchyLevel1TestCase",
 			"ContextRestarted:ContextHierarchyLevel2TestCase",
 			"ContextRefreshed:ContextHierarchyLevel3bTestCase",
 			"AfterTestClass:ContextHierarchyLevel3bTestCase",
-			"ContextStopped:ContextHierarchyLevel3bTestCase",
-			"ContextStopped:ContextHierarchyLevel2TestCase",
-			"ContextStopped:ContextHierarchyLevel1TestCase"
+			"ContextPaused:ContextHierarchyLevel3bTestCase",
+			"ContextPaused:ContextHierarchyLevel2TestCase",
+			"ContextPaused:ContextHierarchyLevel1TestCase"
 		);
 	}
 
@@ -207,10 +204,6 @@ class UnusedContextsIntegrationTests {
 			.execute()
 			.testEvents()
 			.assertStatistics(stats -> stats.started(expectedTestCount).succeeded(expectedTestCount));
-	}
-
-	private static ClassSelector[] selectClasses(Class<?>... classes) {
-		return Arrays.stream(classes).map(DiscoverySelectors::selectClass).toArray(ClassSelector[]::new);
 	}
 
 

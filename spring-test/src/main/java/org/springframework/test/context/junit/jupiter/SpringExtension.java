@@ -52,7 +52,6 @@ import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.core.annotation.MergedAnnotations.SearchStrategy;
 import org.springframework.core.annotation.RepeatableContainers;
 import org.springframework.test.context.MethodInvoker;
-import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.TestContextAnnotationUtils;
 import org.springframework.test.context.TestContextManager;
 import org.springframework.test.context.event.ApplicationEvents;
@@ -169,7 +168,7 @@ public class SpringExtension implements BeforeAllCallback, AfterAllCallback, Tes
 		// re-validate all methods for the same test class multiple times.
 		Store store = context.getStore(AUTOWIRED_VALIDATION_NAMESPACE);
 
-		String errorMessage = store.getOrComputeIfAbsent(context.getRequiredTestClass(), testClass -> {
+		String errorMessage = store.computeIfAbsent(context.getRequiredTestClass(), testClass -> {
 				Method[] methodsWithErrors =
 						ReflectionUtils.getUniqueDeclaredMethods(testClass, autowiredTestOrLifecycleMethodFilter);
 				return (methodsWithErrors.length == 0 ? NO_VIOLATIONS_DETECTED :
@@ -197,7 +196,7 @@ public class SpringExtension implements BeforeAllCallback, AfterAllCallback, Tes
 		// re-validate the configuration for the same test class multiple times.
 		Store store = context.getStore(RECORD_APPLICATION_EVENTS_VALIDATION_NAMESPACE);
 
-		String errorMessage = store.getOrComputeIfAbsent(context.getRequiredTestClass(), testClass -> {
+		String errorMessage = store.computeIfAbsent(context.getRequiredTestClass(), testClass -> {
 			boolean recording = TestContextAnnotationUtils.hasAnnotation(testClass, RecordApplicationEvents.class);
 			if (!recording) {
 				return NO_VIOLATIONS_DETECTED;
@@ -282,7 +281,7 @@ public class SpringExtension implements BeforeAllCallback, AfterAllCallback, Tes
 	 * <ol>
 	 * <li>The {@linkplain ParameterContext#getDeclaringExecutable() declaring
 	 * executable} is a {@link Constructor} and
-	 * {@link TestConstructorUtils#isAutowirableConstructor(Constructor, Class, PropertyProvider)}
+	 * {@link TestConstructorUtils#isAutowirableConstructor(Executable, PropertyProvider)}
 	 * returns {@code true}. Note that {@code isAutowirableConstructor()} will be
 	 * invoked with a fallback {@link PropertyProvider} that delegates its lookup
 	 * to {@link ExtensionContext#getConfigurationParameter(String)}.</li>
@@ -291,30 +290,31 @@ public class SpringExtension implements BeforeAllCallback, AfterAllCallback, Tes
 	 * <li>{@link ParameterResolutionDelegate#isAutowirable} returns {@code true}.</li>
 	 * </ol>
 	 * <p><strong>WARNING</strong>: If a test class {@code Constructor} is annotated
-	 * with {@code @Autowired} or automatically autowirable (see {@link TestConstructor}),
+	 * with {@code @Autowired} or automatically autowirable (see
+	 * {@link org.springframework.test.context.TestConstructor @TestConstructor}),
 	 * Spring will assume the responsibility for resolving all parameters in the
 	 * constructor. Consequently, no other registered {@link ParameterResolver}
 	 * will be able to resolve parameters.
 	 * @see #resolveParameter
-	 * @see TestConstructorUtils#isAutowirableConstructor(Constructor, Class)
+	 * @see TestConstructorUtils#isAutowirableConstructor(Executable, PropertyProvider)
 	 * @see ParameterResolutionDelegate#isAutowirable
 	 */
 	@Override
 	public boolean supportsParameter(ParameterContext parameterContext, ExtensionContext extensionContext) {
 		Parameter parameter = parameterContext.getParameter();
+		Class<?> parameterType = parameter.getType();
 		Executable executable = parameter.getDeclaringExecutable();
-		Class<?> testClass = extensionContext.getRequiredTestClass();
 		PropertyProvider junitPropertyProvider = propertyName ->
 				extensionContext.getConfigurationParameter(propertyName).orElse(null);
-		return (TestConstructorUtils.isAutowirableConstructor(executable, testClass, junitPropertyProvider) ||
-				ApplicationContext.class.isAssignableFrom(parameter.getType()) ||
-				supportsApplicationEvents(parameterContext) ||
+		return (TestConstructorUtils.isAutowirableConstructor(executable, junitPropertyProvider) ||
+				ApplicationContext.class.isAssignableFrom(parameterType) ||
+				supportsApplicationEvents(parameterType, executable) ||
 				ParameterResolutionDelegate.isAutowirable(parameter, parameterContext.getIndex()));
 	}
 
-	private boolean supportsApplicationEvents(ParameterContext parameterContext) {
-		if (ApplicationEvents.class.isAssignableFrom(parameterContext.getParameter().getType())) {
-			Assert.isTrue(parameterContext.getDeclaringExecutable() instanceof Method,
+	private boolean supportsApplicationEvents(Class<?> parameterType, Executable executable) {
+		if (ApplicationEvents.class.isAssignableFrom(parameterType)) {
+			Assert.isTrue(executable instanceof Method,
 					"ApplicationEvents can only be injected into test and lifecycle methods");
 			return true;
 		}
@@ -358,7 +358,7 @@ public class SpringExtension implements BeforeAllCallback, AfterAllCallback, Tes
 		Assert.notNull(context, "ExtensionContext must not be null");
 		Class<?> testClass = context.getRequiredTestClass();
 		Store store = getStore(context);
-		return store.getOrComputeIfAbsent(testClass, TestContextManager::new, TestContextManager.class);
+		return store.computeIfAbsent(testClass, TestContextManager::new, TestContextManager.class);
 	}
 
 	private static Store getStore(ExtensionContext context) {
@@ -372,7 +372,6 @@ public class SpringExtension implements BeforeAllCallback, AfterAllCallback, Tes
 	 * the supplied {@link TestContextManager}.
 	 * @since 6.1
 	 */
-	@SuppressWarnings("NullAway") // org.junit.jupiter.api.extension.ExecutableInvoker is not null marked
 	private static void registerMethodInvoker(TestContextManager testContextManager, ExtensionContext context) {
 		testContextManager.getTestContext().setMethodInvoker(context.getExecutableInvoker()::invoke);
 	}

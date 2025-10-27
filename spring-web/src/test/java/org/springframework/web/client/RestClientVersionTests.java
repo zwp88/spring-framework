@@ -26,6 +26,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,14 +64,20 @@ public class RestClientVersionTests {
 
 	@Test
 	void header() {
-		performRequest(ApiVersionInserter.useHeader("X-API-Version"));
-		expectRequest(request -> assertThat(request.getHeaders().get("X-API-Version")).isEqualTo("1.2"));
+		performRequest(ApiVersionInserter.useHeader("API-Version"));
+		expectRequest(request -> assertThat(request.getHeaders().get("API-Version")).isEqualTo("1.2"));
 	}
 
 	@Test
 	void queryParam() {
 		performRequest(ApiVersionInserter.useQueryParam("api-version"));
 		expectRequest(request -> assertThat(request.getTarget()).isEqualTo("/path?api-version=1.2"));
+	}
+
+	@Test
+	void mediaTypeParam() {
+		performRequest(ApiVersionInserter.useMediaTypeParam("v"));
+		expectRequest(request -> assertThat(request.getHeaders().get("Content-Type")).isEqualTo("application/json;v=1.2"));
 	}
 
 	@Test
@@ -94,16 +101,26 @@ public class RestClientVersionTests {
 
 	@Test
 	void defaultVersion() {
-		ApiVersionInserter inserter = ApiVersionInserter.useHeader("X-API-Version");
+		ApiVersionInserter inserter = ApiVersionInserter.useHeader("API-Version");
 		RestClient restClient = restClientBuilder.defaultApiVersion(1.2).apiVersionInserter(inserter).build();
 		restClient.get().uri("/path").retrieve().body(String.class);
 
-		expectRequest(request -> assertThat(request.getHeaders().get("X-API-Version")).isEqualTo("1.2"));
+		expectRequest(request -> assertThat(request.getHeaders().get("API-Version")).isEqualTo("1.2"));
+	}
+
+	@Test
+	void noVersion() {
+		ApiVersionInserter inserter = ApiVersionInserter.useHeader("API-Version");
+		RestClient restClient = restClientBuilder.defaultApiVersion(1.2).apiVersionInserter(inserter).build();
+		restClient.get().uri("/path").apiVersion(null).retrieve().body(String.class);
+
+		expectRequest(request -> assertThat(request.getHeaders().get("API-Version")).isNull());
 	}
 
 	private void performRequest(ApiVersionInserter versionInserter) {
 		restClientBuilder.apiVersionInserter(versionInserter).build()
-				.get().uri("/path")
+				.post().uri("/path")
+				.contentType(MediaType.APPLICATION_JSON)
 				.apiVersion(1.2)
 				.retrieve()
 				.body(String.class);

@@ -60,6 +60,7 @@ import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.BeanFactoryUtils;
 import org.springframework.beans.factory.BeanNotOfRequiredTypeException;
 import org.springframework.beans.factory.CannotLoadBeanClassException;
+import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InjectionPoint;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
@@ -77,6 +78,7 @@ import org.springframework.beans.factory.config.NamedBeanHolder;
 import org.springframework.core.NamedThreadLocal;
 import org.springframework.core.OrderComparator;
 import org.springframework.core.Ordered;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.SpringProperties;
 import org.springframework.core.annotation.MergedAnnotation;
@@ -191,8 +193,8 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	/** Map from bean name to merged BeanDefinitionHolder. */
 	private final Map<String, BeanDefinitionHolder> mergedBeanDefinitionHolders = new ConcurrentHashMap<>(256);
 
-	/** Set of bean definition names with a primary marker. */
-	private final Set<String> primaryBeanNames = ConcurrentHashMap.newKeySet(16);
+	/** Map of bean definition names with a primary marker plus corresponding type. */
+	private final Map<String, Class<?>> primaryBeanNamesWithType = new ConcurrentHashMap<>(16);
 
 	/** Map of singleton and non-singleton bean names, keyed by dependency type. */
 	private final Map<Class<?>, String[]> allBeanNamesByType = new ConcurrentHashMap<>(64);
@@ -395,6 +397,10 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	@Override
 	public <T> ObjectProvider<T> getBeanProvider(ResolvableType requiredType) {
 		return getBeanProvider(requiredType, true);
+	}
+
+	public <T> ObjectProvider<T> getBeanProvider(ParameterizedTypeReference<T> requiredType) {
+		return getBeanProvider(ResolvableType.forType(requiredType), true);
 	}
 
 
@@ -1024,7 +1030,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	protected void cacheMergedBeanDefinition(RootBeanDefinition mbd, String beanName) {
 		super.cacheMergedBeanDefinition(mbd, beanName);
 		if (mbd.isPrimary()) {
-			this.primaryBeanNames.add(beanName);
+			this.primaryBeanNamesWithType.put(beanName, Void.class);
 		}
 	}
 
@@ -1088,6 +1094,11 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	}
 
 	@Override
+	public void prepareSingletonBootstrap() {
+		this.mainThreadPrefix = getThreadNamePrefix();
+	}
+
+	@Override
 	public void preInstantiateSingletons() throws BeansException {
 		if (logger.isTraceEnabled()) {
 			logger.trace("Pre-instantiating singletons in " + this);
@@ -1098,11 +1109,12 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 		List<String> beanNames = new ArrayList<>(this.beanDefinitionNames);
 
 		// Trigger initialization of all non-lazy singleton beans...
-		List<CompletableFuture<?>> futures = new ArrayList<>();
-
 		this.preInstantiationThread.set(PreInstantiation.MAIN);
-		this.mainThreadPrefix = getThreadNamePrefix();
+		if (this.mainThreadPrefix == null) {
+			this.mainThreadPrefix = getThreadNamePrefix();
+		}
 		try {
+			List<CompletableFuture<?>> futures = new ArrayList<>();
 			for (String beanName : beanNames) {
 				RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
 				if (!mbd.isAbstract() && mbd.isSingleton()) {
@@ -1112,19 +1124,18 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 					}
 				}
 			}
+			if (!futures.isEmpty()) {
+				try {
+					CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
+				}
+				catch (CompletionException ex) {
+					ReflectionUtils.rethrowRuntimeException(ex.getCause());
+				}
+			}
 		}
 		finally {
 			this.mainThreadPrefix = null;
 			this.preInstantiationThread.remove();
-		}
-
-		if (!futures.isEmpty()) {
-			try {
-				CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
-			}
-			catch (CompletionException ex) {
-				ReflectionUtils.rethrowRuntimeException(ex.getCause());
-			}
 		}
 
 		// Trigger post-initialization callback for all applicable beans...
@@ -1309,7 +1320,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 
 		// Cache a primary marker for the given bean.
 		if (beanDefinition.isPrimary()) {
-			this.primaryBeanNames.add(beanName);
+			this.primaryBeanNamesWithType.put(beanName, Void.class);
 		}
 	}
 
@@ -1401,7 +1412,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 		destroySingleton(beanName);
 
 		// Remove a cached primary marker for the given bean.
-		this.primaryBeanNames.remove(beanName);
+		this.primaryBeanNamesWithType.remove(beanName);
 
 		// Notify all post-processors that the specified bean definition has been reset.
 		for (MergedBeanDefinitionPostProcessor processor : getBeanPostProcessorCache().mergedDefinition) {
@@ -1454,15 +1465,27 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	@Override
 	protected void addSingleton(String beanName, Object singletonObject) {
 		super.addSingleton(beanName, singletonObject);
+
 		Predicate<Class<?>> filter = (beanType -> beanType != Object.class && beanType.isInstance(singletonObject));
 		this.allBeanNamesByType.keySet().removeIf(filter);
 		this.singletonBeanNamesByType.keySet().removeIf(filter);
+
+		if (this.primaryBeanNamesWithType.containsKey(beanName) && singletonObject.getClass() != NullBean.class) {
+			Class<?> beanType = (singletonObject instanceof FactoryBean<?> fb ?
+					getTypeForFactoryBean(fb) : singletonObject.getClass());
+			if (beanType != null) {
+				this.primaryBeanNamesWithType.put(beanName, beanType);
+			}
+		}
 	}
 
 	@Override
 	public void registerSingleton(String beanName, Object singletonObject) throws IllegalStateException {
 		super.registerSingleton(beanName, singletonObject);
+
 		updateManualSingletonNames(set -> set.add(beanName), set -> !this.beanDefinitionMap.containsKey(beanName));
+		this.allBeanNamesByType.remove(Object.class);
+		this.singletonBeanNamesByType.remove(Object.class);
 	}
 
 	@Override
@@ -2069,8 +2092,9 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 					boolean candidateLocal = containsBeanDefinition(candidateBeanName);
 					boolean primaryLocal = containsBeanDefinition(primaryBeanName);
 					if (candidateLocal == primaryLocal) {
-						throw new NoUniqueBeanDefinitionException(requiredType, candidates.size(),
-								"more than one 'primary' bean found among candidates: " + candidates.keySet());
+						String message = "more than one 'primary' bean found among candidates: " + candidates.keySet();
+						logger.trace(message);
+						throw new NoUniqueBeanDefinitionException(requiredType, candidates.size(), message);
 					}
 					else if (candidateLocal) {
 						primaryBeanName = candidateBeanName;
@@ -2245,8 +2269,12 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	 * not matching the given bean name.
 	 */
 	private boolean hasPrimaryConflict(String beanName, Class<?> dependencyType) {
-		for (String candidate : this.primaryBeanNames) {
-			if (isTypeMatch(candidate, dependencyType) && !candidate.equals(beanName)) {
+		for (Map.Entry<String, Class<?>> candidate : this.primaryBeanNamesWithType.entrySet()) {
+			String candidateName = candidate.getKey();
+			Class<?> candidateType = candidate.getValue();
+			if (!candidateName.equals(beanName) && (candidateType != Void.class ?
+					dependencyType.isAssignableFrom(candidateType) :  // cached singleton class for primary bean
+					isTypeMatch(candidateName, dependencyType))) {  // not instantiated yet or not a singleton
 				return true;
 			}
 		}

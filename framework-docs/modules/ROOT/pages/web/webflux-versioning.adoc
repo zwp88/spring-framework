@@ -17,7 +17,7 @@ to annotated controller methods with an API version
 to functional endpoints with an API version
 
 Client support for API versioning is available also in `RestClient`, `WebClient`, and
-xref:integration/rest-clients.adoc#rest-http-interface[HTTP Service] clients, as well as
+xref:integration/rest-clients.adoc#rest-http-service-client[HTTP Service] clients, as well as
 for testing in `WebTestClient`.
 
 
@@ -46,8 +46,13 @@ directly with it.
 [.small]#xref:web/webmvc-versioning.adoc#mvc-versioning-resolver[See equivalent in the Servlet stack]#
 
 This strategy resolves the API version from a request. The WebFlux config provides built-in
-options to resolve from a header, a request parameter, or from the URL path.
-You can also use a custom `ApiVersionResolver`.
+options to resolve from a header, query parameter, media type parameter,
+or from the URL path. You can also use a custom `ApiVersionResolver`.
+
+NOTE: The path resolver always resolves the version from the specified path segment, or
+raises `InvalidApiVersionException` otherwise, and therefore it cannot yield to other
+resolvers.
+
 
 
 

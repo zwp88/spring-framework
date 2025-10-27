@@ -262,18 +262,6 @@ class DefaultWebTestClient implements WebTestClient {
 		}
 
 		@Override
-		public RequestBodySpec attribute(String name, Object value) {
-			this.attributes.put(name, value);
-			return this;
-		}
-
-		@Override
-		public RequestBodySpec attributes(Consumer<Map<String, Object>> attributesConsumer) {
-			attributesConsumer.accept(this.attributes);
-			return this;
-		}
-
-		@Override
 		public RequestBodySpec accept(MediaType... acceptableMediaTypes) {
 			getHeaders().setAccept(Arrays.asList(acceptableMediaTypes));
 			return this;
@@ -318,6 +306,18 @@ class DefaultWebTestClient implements WebTestClient {
 		@Override
 		public RequestBodySpec ifNoneMatch(String... ifNoneMatches) {
 			getHeaders().setIfNoneMatch(Arrays.asList(ifNoneMatches));
+			return this;
+		}
+
+		@Override
+		public RequestBodySpec attribute(String name, Object value) {
+			this.attributes.put(name, value);
+			return this;
+		}
+
+		@Override
+		public RequestBodySpec attributes(Consumer<Map<String, Object>> attributesConsumer) {
+			attributesConsumer.accept(this.attributes);
 			return this;
 		}
 
@@ -381,6 +381,11 @@ class DefaultWebTestClient implements WebTestClient {
 					DefaultWebTestClient.this.entityResultConsumer, getResponseTimeout());
 		}
 
+		@Override
+		public ResponseSpec exchangeSuccessfully() {
+			return exchange().expectStatus().is2xxSuccessful();
+		}
+
 		private ClientRequest.Builder initRequestBuilder() {
 			return ClientRequest.create(this.httpMethod, initUri())
 					.headers(headersToUse -> {
@@ -438,12 +443,12 @@ class DefaultWebTestClient implements WebTestClient {
 
 
 		DefaultResponseSpec(
-				ExchangeResult exchangeResult, ClientResponse response,
+				ExchangeResult result, ClientResponse response,
 				@Nullable JsonEncoderDecoder jsonEncoderDecoder,
 				Consumer<EntityExchangeResult<?>> entityResultConsumer,
 				Duration timeout) {
 
-			this.exchangeResult = exchangeResult;
+			this.exchangeResult = result;
 			this.response = response;
 			this.jsonEncoderDecoder = jsonEncoderDecoder;
 			this.entityResultConsumer = entityResultConsumer;
@@ -468,15 +473,15 @@ class DefaultWebTestClient implements WebTestClient {
 		@Override
 		public <B> BodySpec<B, ?> expectBody(Class<B> bodyType) {
 			B body = this.response.bodyToMono(bodyType).block(this.timeout);
-			EntityExchangeResult<B> entityResult = initEntityExchangeResult(body);
-			return new DefaultBodySpec<>(entityResult);
+			EntityExchangeResult<B> result = initEntityExchangeResult(body);
+			return new DefaultBodySpec<>(result);
 		}
 
 		@Override
 		public <B> BodySpec<B, ?> expectBody(ParameterizedTypeReference<B> bodyType) {
 			B body = this.response.bodyToMono(bodyType).block(this.timeout);
-			EntityExchangeResult<B> entityResult = initEntityExchangeResult(body);
-			return new DefaultBodySpec<>(entityResult);
+			EntityExchangeResult<B> result = initEntityExchangeResult(body);
+			return new DefaultBodySpec<>(result);
 		}
 
 		@Override
@@ -500,8 +505,8 @@ class DefaultWebTestClient implements WebTestClient {
 		public BodyContentSpec expectBody() {
 			ByteArrayResource resource = this.response.bodyToMono(ByteArrayResource.class).block(this.timeout);
 			byte[] body = (resource != null ? resource.getByteArray() : null);
-			EntityExchangeResult<byte[]> entityResult = initEntityExchangeResult(body);
-			return new DefaultBodyContentSpec(entityResult, this.jsonEncoderDecoder);
+			EntityExchangeResult<byte[]> result = initEntityExchangeResult(body);
+			return new DefaultBodyContentSpec(result, this.jsonEncoderDecoder);
 		}
 
 		private <B> EntityExchangeResult<B> initEntityExchangeResult(@Nullable B body) {
@@ -596,7 +601,6 @@ class DefaultWebTestClient implements WebTestClient {
 		}
 
 		@Override
-		@SuppressWarnings("NullAway") // https://github.com/uber/NullAway/issues/1129
 		public <T extends S> T value(Consumer<@Nullable B> consumer) {
 			this.result.assertWithDiagnostics(() -> consumer.accept(this.result.getResponseBody()));
 			return self();
@@ -620,7 +624,7 @@ class DefaultWebTestClient implements WebTestClient {
 	}
 
 
-	private static class DefaultListBodySpec<E> extends DefaultBodySpec<List<@Nullable E>, ListBodySpec<E>>
+	private static class DefaultListBodySpec<E extends @Nullable Object> extends DefaultBodySpec<List<E>, ListBodySpec<E>>
 			implements ListBodySpec<E> {
 
 		DefaultListBodySpec(EntityExchangeResult<List<E>> result) {
@@ -629,7 +633,7 @@ class DefaultWebTestClient implements WebTestClient {
 
 		@Override
 		public ListBodySpec<E> hasSize(int size) {
-			List<@Nullable E> actual = getResult().getResponseBody();
+			List<E> actual = getResult().getResponseBody();
 			String message = "Response body does not contain " + size + " elements";
 			getResult().assertWithDiagnostics(() ->
 					AssertionErrors.assertEquals(message, size, (actual != null ? actual.size() : 0)));
@@ -638,9 +642,9 @@ class DefaultWebTestClient implements WebTestClient {
 
 		@Override
 		@SuppressWarnings("unchecked")
-		public ListBodySpec<E> contains(@Nullable E... elements) {
+		public ListBodySpec<E> contains(E... elements) {
 			List<E> expected = Arrays.asList(elements);
-			List<@Nullable E> actual = getResult().getResponseBody();
+			List<E> actual = getResult().getResponseBody();
 			String message = "Response body does not contain " + expected;
 			getResult().assertWithDiagnostics(() ->
 					AssertionErrors.assertTrue(message, (actual != null && actual.containsAll(expected))));
@@ -649,9 +653,9 @@ class DefaultWebTestClient implements WebTestClient {
 
 		@Override
 		@SuppressWarnings("unchecked")
-		public ListBodySpec<E> doesNotContain(@Nullable E... elements) {
+		public ListBodySpec<E> doesNotContain(E... elements) {
 			List<E> expected = Arrays.asList(elements);
-			List<@Nullable E> actual = getResult().getResponseBody();
+			List<E> actual = getResult().getResponseBody();
 			String message = "Response body should not have contained " + expected;
 			getResult().assertWithDiagnostics(() ->
 					AssertionErrors.assertTrue(message, (actual == null || !actual.containsAll(expected))));
@@ -659,7 +663,7 @@ class DefaultWebTestClient implements WebTestClient {
 		}
 
 		@Override
-		public EntityExchangeResult<List<@Nullable E>> returnResult() {
+		public EntityExchangeResult<List<E>> returnResult() {
 			return getResult();
 		}
 	}

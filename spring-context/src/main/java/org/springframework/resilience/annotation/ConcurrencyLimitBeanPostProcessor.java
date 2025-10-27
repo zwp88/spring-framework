@@ -31,9 +31,12 @@ import org.springframework.aop.interceptor.ConcurrencyThrottleInterceptor;
 import org.springframework.aop.support.ComposablePointcut;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
+import org.springframework.context.EmbeddedValueResolverAware;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.Assert;
 import org.springframework.util.ConcurrentReferenceHashMap;
+import org.springframework.util.StringUtils;
+import org.springframework.util.StringValueResolver;
 
 /**
  * A convenient {@link org.springframework.beans.factory.config.BeanPostProcessor
@@ -41,10 +44,15 @@ import org.springframework.util.ConcurrentReferenceHashMap;
  * annotated with {@link ConcurrencyLimit @ConcurrencyLimit}.
  *
  * @author Juergen Hoeller
+ * @author Hyunsang Han
  * @since 7.0
  */
 @SuppressWarnings("serial")
-public class ConcurrencyLimitBeanPostProcessor extends AbstractBeanFactoryAwareAdvisingPostProcessor {
+public class ConcurrencyLimitBeanPostProcessor extends AbstractBeanFactoryAwareAdvisingPostProcessor
+		implements EmbeddedValueResolverAware {
+
+	private @Nullable StringValueResolver embeddedValueResolver;
+
 
 	public ConcurrencyLimitBeanPostProcessor() {
 		setBeforeExistingAdvisors(true);
@@ -57,7 +65,13 @@ public class ConcurrencyLimitBeanPostProcessor extends AbstractBeanFactoryAwareA
 	}
 
 
-	private static class ConcurrencyLimitInterceptor implements MethodInterceptor {
+	@Override
+	public void setEmbeddedValueResolver(StringValueResolver resolver) {
+		this.embeddedValueResolver = resolver;
+	}
+
+
+	private class ConcurrencyLimitInterceptor implements MethodInterceptor {
 
 		private final Map<Object, ConcurrencyThrottleCache> cachePerInstance =
 				new ConcurrentReferenceHashMap<>(16, ConcurrentReferenceHashMap.ReferenceType.WEAK);
@@ -68,7 +82,7 @@ public class ConcurrencyLimitBeanPostProcessor extends AbstractBeanFactoryAwareA
 			Object target = invocation.getThis();
 			Class<?> targetClass = (target != null ? target.getClass() : method.getDeclaringClass());
 			if (target == null && invocation instanceof ProxyMethodInvocation methodInvocation) {
-				// Allow validation for AOP proxy without a target
+				// Support concurrency throttling for AOP proxy without a target
 				target = methodInvocation.getProxy();
 			}
 			Assert.state(target != null, "Target must not be null");
@@ -81,19 +95,23 @@ public class ConcurrencyLimitBeanPostProcessor extends AbstractBeanFactoryAwareA
 					interceptor = cache.methodInterceptors.get(method);
 					if (interceptor == null) {
 						boolean perMethod = false;
-						ConcurrencyLimit limit = AnnotatedElementUtils.getMergedAnnotation(method, ConcurrencyLimit.class);
-						if (limit != null) {
+						ConcurrencyLimit annotation = AnnotatedElementUtils.getMergedAnnotation(method, ConcurrencyLimit.class);
+						if (annotation != null) {
 							perMethod = true;
 						}
 						else {
 							interceptor = cache.classInterceptor;
 							if (interceptor == null) {
-								limit = AnnotatedElementUtils.getMergedAnnotation(targetClass, ConcurrencyLimit.class);
+								annotation = AnnotatedElementUtils.getMergedAnnotation(targetClass, ConcurrencyLimit.class);
 							}
 						}
 						if (interceptor == null) {
-							Assert.state(limit != null, "No @ConcurrencyLimit annotation found");
-							interceptor = new ConcurrencyThrottleInterceptor(limit.value());
+							Assert.state(annotation != null, "No @ConcurrencyLimit annotation found");
+							int concurrencyLimit = parseInt(annotation.limit(), annotation.limitString());
+							if (concurrencyLimit < -1) {
+								throw new IllegalStateException(annotation + " must be configured with a valid limit");
+							}
+							interceptor = new ConcurrencyThrottleInterceptor(concurrencyLimit);
 							if (!perMethod) {
 								cache.classInterceptor = interceptor;
 							}
@@ -103,6 +121,18 @@ public class ConcurrencyLimitBeanPostProcessor extends AbstractBeanFactoryAwareA
 				}
 			}
 			return interceptor.invoke(invocation);
+		}
+
+		private int parseInt(int value, String stringValue) {
+			if (StringUtils.hasText(stringValue)) {
+				if (embeddedValueResolver != null) {
+					stringValue = embeddedValueResolver.resolveStringValue(stringValue);
+				}
+				if (StringUtils.hasText(stringValue)) {
+					return Integer.parseInt(stringValue);
+				}
+			}
+			return value;
 		}
 	}
 

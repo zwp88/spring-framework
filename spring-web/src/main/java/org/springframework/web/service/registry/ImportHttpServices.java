@@ -53,7 +53,7 @@ import org.springframework.web.service.annotation.HttpExchange;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Repeatable(ImportHttpServices.Container.class)
-@Import(AnnotationHttpServiceRegistrar.class)
+@Import(ImportHttpServiceRegistrar.class)
 public @interface ImportHttpServices {
 
 	/**
@@ -76,10 +76,8 @@ public @interface ImportHttpServices {
 	String group() default HttpServiceGroup.DEFAULT_GROUP_NAME;
 
 	/**
-	 * Detect HTTP Services in the packages of the specified classes by looking
-	 * for interfaces with type-level or method-level
-	 * {@link org.springframework.web.service.annotation.HttpExchange @HttpExchange}
-	 * annotations.
+	 * Detect HTTP Services in the packages of the specified classes, looking
+	 * for interfaces with type or method {@link HttpExchange} annotations.
 	 */
 	Class<?>[] basePackageClasses() default {};
 
@@ -106,7 +104,7 @@ public @interface ImportHttpServices {
 	@Target(ElementType.TYPE)
 	@Retention(RetentionPolicy.RUNTIME)
 	@Documented
-	@Import(AnnotationHttpServiceRegistrar.class)
+	@Import(ImportHttpServiceRegistrar.class)
 	@interface Container {
 
 		ImportHttpServices[] value();

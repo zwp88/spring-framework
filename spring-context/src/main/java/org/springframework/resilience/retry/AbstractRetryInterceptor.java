@@ -17,6 +17,7 @@
 package org.springframework.resilience.retry;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.Future;
 
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
@@ -26,6 +27,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
+import org.springframework.aop.ProxyMethodInvocation;
 import org.springframework.core.ReactiveAdapter;
 import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.retry.RetryException;
@@ -50,14 +52,14 @@ public abstract class AbstractRetryInterceptor implements MethodInterceptor {
 	/**
 	 * Reactive Streams API present on the classpath?
 	 */
-	private static final boolean reactiveStreamsPresent = ClassUtils.isPresent(
+	private static final boolean REACTIVE_STREAMS_PRESENT = ClassUtils.isPresent(
 			"org.reactivestreams.Publisher", AbstractRetryInterceptor.class.getClassLoader());
 
 	private final @Nullable ReactiveAdapterRegistry reactiveAdapterRegistry;
 
 
 	public AbstractRetryInterceptor() {
-		if (reactiveStreamsPresent) {
+		if (REACTIVE_STREAMS_PRESENT) {
 			this.reactiveAdapterRegistry = ReactiveAdapterRegistry.getSharedInstance();
 		}
 		else {
@@ -76,7 +78,7 @@ public abstract class AbstractRetryInterceptor implements MethodInterceptor {
 			return invocation.proceed();
 		}
 
-		if (this.reactiveAdapterRegistry != null) {
+		if (this.reactiveAdapterRegistry != null && !Future.class.isAssignableFrom(method.getReturnType())) {
 			ReactiveAdapter adapter = this.reactiveAdapterRegistry.getAdapter(method.getReturnType());
 			if (adapter != null) {
 				Object result = invocation.proceed();
@@ -100,10 +102,11 @@ public abstract class AbstractRetryInterceptor implements MethodInterceptor {
 		RetryTemplate retryTemplate = new RetryTemplate(retryPolicy);
 
 		try {
-			return retryTemplate.execute(new Retryable<>() {
+			return retryTemplate.execute(new Retryable<@Nullable Object>() {
 				@Override
 				public @Nullable Object execute() throws Throwable {
-					return invocation.proceed();
+					return (invocation instanceof ProxyMethodInvocation pmi ?
+							pmi.invocableClone().proceed() : invocation.proceed());
 				}
 				@Override
 				public String getName() {
@@ -112,8 +115,7 @@ public abstract class AbstractRetryInterceptor implements MethodInterceptor {
 			});
 		}
 		catch (RetryException ex) {
-			Throwable cause = ex.getCause();
-			throw (cause != null ? cause : new IllegalStateException(ex.getMessage(), ex));
+			throw ex.getCause();
 		}
 	}
 

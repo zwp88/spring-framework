@@ -23,8 +23,19 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
 
 /**
- * Contract to determine how to insert an API version into the URI or headers
- * of a request.
+ * Contract to insert an API version into the URI or headers of a request.
+ *
+ * <p>Use shortcut, static factory methods on this interface to create one of
+ * the built-in inserter type implementations:
+ * <ul>
+ * <li>{@link #useHeader(String)}
+ * <li>{@link #useQueryParam(String)}
+ * <li>{@link #useMediaTypeParam(String)}
+ * <li>{@link #usePathSegment(Integer)}
+ * </ul>
+ *
+ * <p>Use the {@link #builder()} for further options such as if you want to also
+ * configure an {@link ApiVersionFormatter}.
  *
  * @author Rossen Stoyanchev
  * @since 7.0
@@ -57,7 +68,7 @@ public interface ApiVersionInserter {
 	 * @param header the name of a header to hold the version
 	 */
 	static ApiVersionInserter useHeader(@Nullable String header) {
-		return new DefaultApiVersionInserterBuilder(header, null, null).build();
+		return new DefaultApiVersionInserterBuilder(header, null, null, null).build();
 	}
 
 	/**
@@ -65,7 +76,15 @@ public interface ApiVersionInserter {
 	 * @param queryParam the name of a query parameter to hold the version
 	 */
 	static ApiVersionInserter useQueryParam(@Nullable String queryParam) {
-		return new DefaultApiVersionInserterBuilder(null, queryParam, null).build();
+		return new DefaultApiVersionInserterBuilder(null, queryParam, null, null).build();
+	}
+
+	/**
+	 * Create an inserter to set a MediaType parameter on the "Content-Type" header.
+	 * @param mediaTypeParam the name of the media type parameter to hold the version
+	 */
+	static ApiVersionInserter useMediaTypeParam(@Nullable String mediaTypeParam) {
+		return new DefaultApiVersionInserterBuilder(null, null, mediaTypeParam, null).build();
 	}
 
 	/**
@@ -73,14 +92,14 @@ public interface ApiVersionInserter {
 	 * @param pathSegmentIndex the index of the path segment to hold the version
 	 */
 	static ApiVersionInserter usePathSegment(@Nullable Integer pathSegmentIndex) {
-		return new DefaultApiVersionInserterBuilder(null, null, pathSegmentIndex).build();
+		return new DefaultApiVersionInserterBuilder(null, null, null, pathSegmentIndex).build();
 	}
 
 	/**
 	 * Create a builder for an {@link ApiVersionInserter}.
 	 */
 	static Builder builder() {
-		return new DefaultApiVersionInserterBuilder(null, null, null);
+		return new DefaultApiVersionInserterBuilder(null, null, null, null);
 	}
 
 
@@ -100,6 +119,12 @@ public interface ApiVersionInserter {
 		 * @param queryParam the name of the query parameter to hold the version
 		 */
 		Builder useQueryParam(@Nullable String queryParam);
+
+		/**
+		 * Create an inserter to set a MediaType parameter on the "Content-Type" header.
+		 * @param param the name of the media type parameter to hold the version
+		 */
+		Builder useMediaTypeParam(@Nullable String param);
 
 		/**
 		 * Configure the inserter to insert a path segment.

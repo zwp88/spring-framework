@@ -40,6 +40,7 @@ import org.springframework.resilience.retry.MethodRetryPredicate;
  * project but redesigned as a minimal core retry feature in the Spring Framework.
  *
  * @author Juergen Hoeller
+ * @author Sam Brannen
  * @since 7.0
  * @see EnableResilientMethods
  * @see RetryAnnotationBeanPostProcessor
@@ -64,6 +65,11 @@ public @interface Retryable {
 	/**
 	 * Applicable exception types to attempt a retry for. This attribute
 	 * allows for the convenient specification of assignable exception types.
+	 * <p>The supplied exception types will be matched against an exception
+	 * thrown by a failed invocation as well as nested
+	 * {@linkplain Throwable#getCause() causes}.
+	 * <p>This can optionally be combined with {@link #excludes() excludes} or
+	 * a custom {@link #predicate() predicate}.
 	 * <p>The default is empty, leading to a retry attempt for any exception.
 	 * @see #excludes()
 	 * @see #predicate()
@@ -74,6 +80,11 @@ public @interface Retryable {
 	/**
 	 * Non-applicable exception types to avoid a retry for. This attribute
 	 * allows for the convenient specification of assignable exception types.
+	 * <p>The supplied exception types will be matched against an exception
+	 * thrown by a failed invocation as well as nested
+	 * {@linkplain Throwable#getCause() causes}.
+	 * <p>This can optionally be combined with {@link #includes() includes} or
+	 * a custom {@link #predicate() predicate}.
 	 * <p>The default is empty, leading to a retry attempt for any exception.
 	 * @see #includes()
 	 * @see #predicate()
@@ -81,12 +92,14 @@ public @interface Retryable {
 	Class<? extends Throwable>[] excludes() default {};
 
 	/**
-	 * A predicate for filtering applicable exceptions for which
-	 * an invocation can be retried.
-	 * <p>The default is a retry attempt for any exception.
+	 * A predicate for filtering applicable exceptions for which an invocation can
+	 * be retried.
 	 * <p>A specified {@link MethodRetryPredicate} implementation will be instantiated
 	 * per method. It can use dependency injection at the constructor level or through
 	 * autowiring annotations, in case it needs access to other beans or facilities.
+	 * <p>This can optionally be combined with {@link #includes() includes} or
+	 * {@link #excludes() excludes}.
+	 * <p>The default is a retry attempt for any exception.
 	 * @see #includes()
 	 * @see #excludes()
 	 */

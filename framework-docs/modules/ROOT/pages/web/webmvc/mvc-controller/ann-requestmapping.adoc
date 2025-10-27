@@ -135,9 +135,9 @@ You can map requests by using glob patterns and wildcards:
 
 `+"/projects/{project}/versions"+` does not match `+"/projects/spring/framework/versions"+` as it captures a single path segment.
 
-| `+{name:[a-z]+}+`
-| Matches the regexp `+"[a-z]+"+` as a path variable named "name"
-| `+"/projects/{project:[a-z]+}/versions"+` matches `+"/projects/spring/versions"+` but not `+"/projects/spring1/versions"+`
+| `{name:[a-z]+}`
+| Matches the regexp `[a-z]+` as a path variable named "name"
+| `/projects/{project:[a-z]+}/versions` matches `/projects/spring/versions` but not `/projects/spring1/versions`
 
 | `+{*path}+`
 | Matches zero or more path segments and captures it as a variable named "path"
@@ -251,10 +251,13 @@ Kotlin::
 ----
 ======
 
-URI path patterns can also have embedded `${...}` placeholders that are resolved on startup
-by using `PropertySourcesPlaceholderConfigurer` against local, system, environment, and
-other property sources. You can use this, for example, to parameterize a base URL based on
-some external configuration.
+URI path patterns can also have:
+
+- Embedded `${...}` placeholders that are resolved on startup via
+`PropertySourcesPlaceholderConfigurer` against local, system, environment, and
+other property sources. This is useful, for example, to parameterize a base URL based on
+external configuration.
+- SpEL expression `#{...}`.
 
 
 [[mvc-ann-requestmapping-pattern-comparison]]
@@ -656,10 +659,9 @@ Kotlin::
 [.small]#xref:web/webflux/controller/ann-requestmapping.adoc#webflux-ann-httpexchange-annotation[See equivalent in the Reactive stack]#
 
 While the main purpose of `@HttpExchange` is to abstract HTTP client code with a
-generated proxy, the
-xref:integration/rest-clients.adoc#rest-http-interface[HTTP Interface] on which
-such annotations are placed is a contract neutral to client vs server use.
-In addition to simplifying client code, there are also cases where an HTTP Interface
+generated proxy, the interface on which such annotations are placed is a contract neutral
+to client vs server use. In addition to simplifying client code, there are also cases
+where an xref:integration/rest-clients.adoc#rest-http-service-client[HTTP Service Client]
 may be a convenient way for servers to expose their API for client access. This leads
 to increased coupling between client and server and is often not a good choice,
 especially for public API's, but may be exactly the goal for an internal API.
@@ -736,7 +738,7 @@ path, and content types.
 For method parameters and returns values, generally, `@HttpExchange` supports a
 subset of the method parameters that `@RequestMapping` does. Notably, it excludes any
 server-side specific parameter types. For details, see the list for
-xref:integration/rest-clients.adoc#rest-http-interface-method-parameters[@HttpExchange] and
+xref:integration/rest-clients.adoc#rest-http-service-client-method-parameters[@HttpExchange] and
 xref:web/webmvc/mvc-controller/ann-methods/arguments.adoc[@RequestMapping].
 
 `@HttpExchange` also supports a `headers()` parameter which accepts `"name=value"`-like
